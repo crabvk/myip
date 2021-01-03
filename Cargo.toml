@@ -2,7 +2,7 @@
 name = "myip"
 version = "0.1.0"
 authors = ["Vyacheslav Konovalov <crabvk@protonmail.com>"]
-description = "The fastest way to get your external IP address."
+description = "A command-line tool to get your external IP address."
 homepage = "https://github.com/crabvk/myip"
 repository = "https://github.com/crabvk/myip"
 readme = "README.md"
