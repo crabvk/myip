@@ -7,9 +7,18 @@ mod output;
 use atty::Stream;
 use clap::{App, AppSettings, Arg};
 use output::OutputFormat;
+use std::net::{IpAddr, Ipv4Addr};
 use std::process::exit;
 
 const DEFAULT_DATABASE_PATH: &str = "/var/lib/GeoIP";
+
+fn is_ipv4(value: String) -> Result<(), String> {
+    if value.parse::<Ipv4Addr>().is_ok() {
+        Ok(())
+    } else {
+        Err(String::from("specified IPv4 address has wrong format."))
+    }
+}
 
 fn main() {
     let matches = App::new("myip")
@@ -18,9 +27,10 @@ fn main() {
         .version(clap::crate_version!())
         .about(clap::crate_description!())
         .version_short("v")
+        .arg(Arg::from_usage("-i, --ip=[IP] 'Look for specified IP.'").validator(is_ipv4))
         .arg(
-            Arg::from_usage("-i, --ip 'Show only ip (without quering MaxMind database).'")
-                .conflicts_with_all(&["db", "json"]),
+            Arg::from_usage("-s, --short 'Show only ip (without quering MaxMind database).'")
+                .conflicts_with_all(&["ip", "db", "json", "color"]),
         )
         .arg(Arg::from_usage("-j, --json 'Output in JSON.'"))
         .arg(Arg::from_usage(
@@ -35,8 +45,10 @@ fn main() {
         )
         .get_matches();
 
-    let out = if matches.is_present("json") && !matches.is_present("ip") {
+    let out = if matches.is_present("json") {
         OutputFormat::Json
+    } else if matches.is_present("short") {
+        OutputFormat::Text(false)
     } else {
         let color = matches.value_of("color").unwrap_or("auto");
         let use_color = match color {
@@ -48,12 +60,15 @@ fn main() {
         OutputFormat::Text(use_color)
     };
 
-    let addr = ip::dig().unwrap_or_else(|e| {
-        eprintln!("{}", out.format_dns_error(e));
-        exit(1)
-    });
+    let addr = match matches.value_of("ip") {
+        Some(addr) => IpAddr::V4(addr.parse().unwrap()),
+        None => ip::dig().unwrap_or_else(|e| {
+            eprintln!("{}", out.format_dns_error(e));
+            exit(1)
+        }),
+    };
 
-    if matches.is_present("ip") {
+    if matches.is_present("short") {
         println!("{}", addr);
         exit(0);
     }
