@@ -9,37 +9,39 @@ use maxminddb::MaxMindDBError;
 use std::char;
 
 pub enum OutputFormat {
-    Text,
+    Text(bool),
     Json,
 }
 
 impl OutputFormat {
-    pub fn format(&self, data: GeoIpData) -> String {
+    pub fn format(&self, data: &mut GeoIpData) -> String {
         match self {
-            Self::Text => TextData::new()
-                .add_field("IP", data.ip)
-                .add_some("City", data.city)
-                .add_pair("Country", data.country)
-                .add_pair("Region", data.region)
-                .add_pair("Registered", data.registered)
-                .add_some("ISP", data.isp)
-                .add_some("Time zone", data.time_zone)
+            Self::Text(use_color) => TextData::new(*use_color)
+                .add_some(data, "IP", "ip")
+                .add_some(data, "City", "city")
+                .add_pair(data, "Country", "country", "country_code")
+                .add_pair(data, "Region", "region", "region_code")
+                .add_pair(data, "Registered", "registered", "registered_code")
+                .add_some(data, "ISP", "isp")
+                .add_some(data, "Time zone", "time_zone")
                 .print(),
             Self::Json => {
                 let jd = JsonData::new()
-                    .add_field("IP", data.ip)
-                    .add_some("city", data.city)
-                    .add_pair("region", "regionCode", data.region)
-                    .add_pair("registered", "registeredCode", data.registered)
-                    .add_some("timeZone", data.time_zone)
-                    .add_some("ISP", data.isp);
+                    .add_some(data, "IP", "ip")
+                    .add_some(data, "city", "city")
+                    .add_some(data, "region", "region")
+                    .add_some(data, "regionCode", "region_code")
+                    .add_some(data, "registered", "registered")
+                    .add_some(data, "timeZone", "time_zone")
+                    .add_some(data, "ISP", "isp");
 
-                match data.country {
-                    Some((name, code)) => {
+                match data.remove("country") {
+                    Some(name) => {
+                        let code = data.remove("country_code").unwrap();
                         let flag = country_code_to_flag(&code);
-                        jd.add_field("country", name)
-                            .add_field("countryCode", code)
-                            .add_field("flag", flag)
+                        jd.add("country", name)
+                            .add("countryCode", code)
+                            .add("flag", flag)
                             .print()
                     }
                     _ => jd.print(),
@@ -50,7 +52,7 @@ impl OutputFormat {
 
     pub fn format_dns_error(&self, error: TransportError) -> String {
         match self {
-            OutputFormat::Text => {
+            OutputFormat::Text(_) => {
                 format!(
                     "Error [{}]: {}",
                     dns_error_type(&error),
@@ -59,15 +61,15 @@ impl OutputFormat {
             }
 
             OutputFormat::Json => JsonData::new()
-                .add_field("type", dns_error_type(&error))
-                .add_field("error", dns_error_message(error))
+                .add("type", dns_error_type(&error))
+                .add("error", dns_error_message(error))
                 .print(),
         }
     }
 
     pub fn format_db_error(&self, error: MaxMindDBError) -> String {
         match self {
-            OutputFormat::Text => {
+            OutputFormat::Text(_) => {
                 format!(
                     "Error [{}]: {}",
                     db_error_type(&error),
@@ -76,8 +78,8 @@ impl OutputFormat {
             }
 
             OutputFormat::Json => JsonData::new()
-                .add_field("type", db_error_type(&error).into())
-                .add_field("error", db_error_message(error).into())
+                .add("type", db_error_type(&error).into())
+                .add("error", db_error_message(error).into())
                 .print(),
         }
     }
@@ -85,38 +87,50 @@ impl OutputFormat {
 
 struct TextData {
     lines: Vec<String>,
+    use_color: bool,
 }
 
 impl TextData {
-    fn new() -> Self {
-        Self { lines: vec![] }
+    fn new(use_color: bool) -> Self {
+        Self {
+            lines: vec![],
+            use_color,
+        }
     }
 
-    fn add_field(mut self, name: &str, value: String) -> Self {
-        let s = format!(
-            "{:indent$}{}{} {}",
-            "",
-            Blue.bold().paint(name),
-            Style::new().bold().paint(":"),
-            Green.paint(value),
-            indent = 10 - name.len()
-        );
+    fn add(mut self, name: &str, value: String) -> Self {
+        let i = 10 - name.len();
+
+        let s = if self.use_color {
+            format!(
+                "{:indent$}{}{} {}",
+                "",
+                Blue.bold().paint(name),
+                Style::new().bold().paint(":"),
+                Green.paint(value),
+                indent = i
+            )
+        } else {
+            format!("{:indent$}{}: {}", "", name, value, indent = i)
+        };
+
         self.lines.push(s);
         self
     }
 
-    fn add_some(self, name: &str, value: Option<String>) -> Self {
-        match value {
-            Some(value) => self.add_field(name, value),
-            _ => self,
+    fn add_some(self, data: &mut GeoIpData, name: &str, key: &str) -> Self {
+        match data.remove(key) {
+            Some(value) => self.add(name, value),
+            None => self,
         }
     }
 
-    fn add_pair(self, name: &str, values: Option<(String, String)>) -> Self {
-        match values {
-            Some((value1, value2)) => {
+    fn add_pair(self, data: &mut GeoIpData, name: &str, key1: &str, key2: &str) -> Self {
+        match data.remove(key1) {
+            Some(value1) => {
+                let value2 = data.remove(key2).unwrap();
                 let value = format!("{} ({})", value1, value2);
-                self.add_field(name, value)
+                self.add(name, value)
             }
             _ => self,
         }
@@ -136,7 +150,7 @@ impl JsonData {
         Self { json: Json::new() }
     }
 
-    fn add_field(mut self, name: &str, value: String) -> Self {
+    fn add(mut self, name: &str, value: String) -> Self {
         self.json.add(Json::OBJECT {
             name: name.into(),
             value: Box::new(Json::STRING(value)),
@@ -144,16 +158,9 @@ impl JsonData {
         self
     }
 
-    fn add_some(self, name: &str, value: Option<String>) -> Self {
-        match value {
-            Some(value) => self.add_field(name, value),
-            _ => self,
-        }
-    }
-
-    fn add_pair(self, name1: &str, name2: &str, values: Option<(String, String)>) -> Self {
-        match values {
-            Some((value1, value2)) => self.add_field(name1, value1).add_field(name2, value2),
+    fn add_some(self, data: &mut GeoIpData, name: &str, key: &str) -> Self {
+        match data.remove(key) {
+            Some(value) => self.add(name, value),
             _ => self,
         }
     }

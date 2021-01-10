@@ -4,6 +4,7 @@ mod geoip;
 mod ip;
 mod output;
 
+use atty::Stream;
 use clap::{App, AppSettings, Arg};
 use output::OutputFormat;
 use std::process::exit;
@@ -25,12 +26,26 @@ fn main() {
         .arg(Arg::from_usage(
             "-d, --db=[PATH] 'Custom MaxMind database directory [default: /var/lib/GeoIP].'",
         ))
+        .arg(
+            Arg::from_usage(
+                "-c, --color 'When to colorize text output (always, never, auto) [default: auto].'",
+            )
+            .possible_values(&["always", "never", "auto"])
+            .conflicts_with("json"),
+        )
         .get_matches();
 
     let out = if matches.is_present("json") && !matches.is_present("ip") {
         OutputFormat::Json
     } else {
-        OutputFormat::Text
+        let color = matches.value_of("color").unwrap_or("auto");
+        let use_color = match color {
+            "always" => true,
+            "never" => false,
+            _ => atty::is(Stream::Stdout),
+        };
+
+        OutputFormat::Text(use_color)
     };
 
     let addr = ip::dig().unwrap_or_else(|e| {
@@ -44,10 +59,10 @@ fn main() {
     }
 
     let path = matches.value_of("db").unwrap_or(DEFAULT_DATABASE_PATH);
-    let data = geoip::lookup(path, addr).unwrap_or_else(|e| {
+    let mut data = geoip::lookup(path, addr).unwrap_or_else(|e| {
         eprintln!("{}", out.format_db_error(e));
         exit(2)
     });
 
-    println!("{}", out.format(data));
+    println!("{}", out.format(&mut data));
 }
