@@ -39,7 +39,7 @@ fn main() {
         ))
         .arg(
             Arg::from_usage(
-                "-c, --color 'When to colorize text output (always, never, auto) [default: auto].'",
+                "-c, --color=[WHEN] 'When to colorize text output (always, never, auto) [default: auto].'",
             )
             .possible_values(&["always", "never", "auto"])
             .conflicts_with("json"),
