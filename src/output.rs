@@ -43,12 +43,24 @@ impl Format {
         }
     }
 
-    pub fn format_error(&self, msg: String) -> String {
+    pub fn format_error(&self, msg: String, ip: Option<String>) -> String {
         match self {
-            Self::Text(_) => msg,
+            Self::Text(_) => {
+                if let Some(ip) = ip {
+                    let mut error = ip;
+                    error.push('\n');
+                    error.push_str(&msg);
+                    error
+                } else {
+                    msg
+                }
+            }
             Self::Json => {
                 let mut error = HashMap::new();
                 error.insert("error", msg);
+                if let Some(ip) = ip {
+                    error.insert("ip", ip);
+                }
                 serde_json::to_string(&error).unwrap()
             }
         }

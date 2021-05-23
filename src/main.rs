@@ -28,7 +28,7 @@ fn main() {
         .version(clap::crate_version!())
         .about(clap::crate_description!())
         .version_short("v")
-        .arg(Arg::from_usage("-i, --ip=[IP] 'Look for specified IP.'").validator(is_ipv4))
+        .arg(Arg::from_usage("-a, --address=[IP] 'Look for specified IP.'").validator(is_ipv4))
         .arg(
             Arg::from_usage("-s, --short 'Show only ip (without quering MaxMind database).'")
                 .conflicts_with_all(&["ip", "db", "json", "color"]),
@@ -61,11 +61,11 @@ fn main() {
         Format::Text(use_color)
     };
 
-    let addr = match matches.value_of("ip") {
+    let addr = match matches.value_of("address") {
         Some(addr) => IpAddr::V4(addr.parse().unwrap()),
         None => ip::dig().unwrap_or_else(|error| {
             let msg = error_message(error);
-            eprintln!("{}", format.format_error(msg));
+            eprintln!("{}", format.format_error(msg, None));
             exit(1)
         }),
     };
@@ -78,7 +78,8 @@ fn main() {
     let path = matches.value_of("db").unwrap_or(DEFAULT_DATABASE_PATH);
     let output = query_db(&format, path, addr).unwrap_or_else(|error| {
         let msg = error.to_string();
-        eprintln!("{}", format.format_error(msg));
+        let ip = addr.to_string();
+        eprintln!("{}", format.format_error(msg, Some(ip)));
         exit(2)
     });
 
