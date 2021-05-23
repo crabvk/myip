@@ -1,14 +1,6 @@
 use dns::{MandatedLength, WireError};
 use dns_transport::Error as TransportError;
 
-pub fn error_type(error: &TransportError) -> String {
-    if let TransportError::WireError(_) = error {
-        "dns/protocol".into()
-    } else {
-        "dns/network".into()
-    }
-}
-
 pub fn error_message(error: TransportError) -> String {
     match error {
         TransportError::WireError(e) => wire_error_message(e),
@@ -17,7 +9,7 @@ pub fn error_message(error: TransportError) -> String {
     }
 }
 
-// Copied from dog/src/output.rs
+// Copy from dog/src/output.rs
 fn wire_error_message(error: WireError) -> String {
     match error {
         WireError::IO => "Malformed packet: insufficient data".into(),

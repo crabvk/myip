@@ -1,96 +1,100 @@
-use super::db_error::{error_message as db_error_message, error_type as db_error_type};
-use super::dns_error::{error_message as dns_error_message, error_type as dns_error_type};
-use super::geoip::GeoIpData;
 use ansi_term::Color::{Blue, Green};
 use ansi_term::Style;
-use dns_transport::Error as TransportError;
-use json_minimal::Json;
-use maxminddb::MaxMindDBError;
+use maxminddb::geoip2::{Asn, City};
 use std::char;
+use std::collections::HashMap;
+use std::net::IpAddr;
 
-pub enum OutputFormat {
+pub type GeoIpData<'a> = HashMap<&'a str, &'a str>;
+
+pub enum Format {
     Text(bool),
     Json,
 }
 
-impl OutputFormat {
-    pub fn format(&self, data: &mut GeoIpData) -> String {
+impl Format {
+    pub fn output<'a>(&self, ip: IpAddr, city: &'a City, asn: &'a Asn) -> String {
         match self {
-            Self::Text(use_color) => TextData::new(*use_color)
-                .add_some(data, "IP", "ip")
-                .add_some(data, "City", "city")
-                .add_pair(data, "Country", "country", "country_code")
-                .add_pair(data, "Region", "region", "region_code")
-                .add_pair(data, "Registered", "registered", "registered_code")
-                .add_some(data, "ISP", "isp")
-                .add_some(data, "Time zone", "time_zone")
-                .print(),
-            Self::Json => {
-                let jd = JsonData::new()
+            Self::Text(use_colors) => {
+                let data = &mut get_data(city, asn);
+                TextOutput::new(*use_colors)
                     .add_some(data, "IP", "ip")
-                    .add_some(data, "city", "city")
-                    .add_some(data, "region", "region")
-                    .add_some(data, "regionCode", "region_code")
-                    .add_some(data, "registered", "registered")
-                    .add_some(data, "timeZone", "time_zone")
-                    .add_some(data, "ISP", "isp");
+                    .add_some(data, "City", "city")
+                    .add_pair(data, "Country", "country", "country_code")
+                    .add_pair(data, "Region", "region", "region_code")
+                    .add_pair(data, "Registered", "registered", "registered_code")
+                    .add_some(data, "ISP", "isp")
+                    .add_some(data, "Time zone", "time_zone")
+                    .to_string()
+            }
+            Self::Json => {
+                let mut data = get_data(city, asn);
+                let ip = &ip.to_string();
+                data.insert("ip", ip);
 
-                match data.remove("country") {
-                    Some(name) => {
-                        let code = data.remove("country_code").unwrap();
-                        let flag = country_code_to_flag(&code);
-                        jd.add("country", name)
-                            .add("countryCode", code)
-                            .add("flag", flag)
-                            .print()
-                    }
-                    _ => jd.print(),
+                let flag;
+                if let Some(code) = data.get("country_code") {
+                    flag = get_flag(&code);
+                    data.insert("flag", &flag);
                 }
+
+                serde_json::to_string(&data).unwrap()
             }
         }
     }
 
-    pub fn format_dns_error(&self, error: TransportError) -> String {
+    pub fn format_error(&self, msg: String) -> String {
         match self {
-            OutputFormat::Text(_) => {
-                format!(
-                    "Error [{}]: {}",
-                    dns_error_type(&error),
-                    dns_error_message(error)
-                )
+            Self::Text(_) => msg,
+            Self::Json => {
+                let mut error = HashMap::new();
+                error.insert("error", msg);
+                serde_json::to_string(&error).unwrap()
             }
-
-            OutputFormat::Json => JsonData::new()
-                .add("type", dns_error_type(&error))
-                .add("error", dns_error_message(error))
-                .print(),
-        }
-    }
-
-    pub fn format_db_error(&self, error: MaxMindDBError) -> String {
-        match self {
-            OutputFormat::Text(_) => {
-                format!(
-                    "Error [{}]: {}",
-                    db_error_type(&error),
-                    db_error_message(error)
-                )
-            }
-
-            OutputFormat::Json => JsonData::new()
-                .add("type", db_error_type(&error).into())
-                .add("error", db_error_message(error).into())
-                .print(),
         }
     }
 }
 
-struct TextData {
+fn get_data<'a>(city: &'a City, asn: &'a Asn) -> GeoIpData<'a> {
+    let mut data: GeoIpData = HashMap::new();
+
+    if let Some(city) = &city.city {
+        data.insert("city", city.names.as_ref().unwrap()["en"]);
+    }
+
+    if let Some(country) = &city.country {
+        data.insert("country", country.names.as_ref().unwrap()["en"]);
+        data.insert("country_code", country.iso_code.unwrap());
+    }
+
+    if let Some(sds) = &city.subdivisions {
+        let region = sds.first().unwrap();
+        data.insert("region", region.names.as_ref().unwrap()["en"]);
+        data.insert("region_code", region.iso_code.unwrap());
+    }
+
+    if let Some(registered) = &city.registered_country {
+        data.insert("registered", registered.names.as_ref().unwrap()["en"]);
+        data.insert("registered_code", registered.iso_code.unwrap());
+    }
+
+    if let Some(location) = &city.location {
+        data.insert("time_zone", location.time_zone.unwrap());
+    }
+
+    if let Some(isp) = asn.autonomous_system_organization {
+        data.insert("isp", isp);
+    }
+
+    data
+}
+
+struct TextOutput {
     lines: Vec<String>,
     use_color: bool,
 }
 
-impl TextData {
+impl TextOutput {
     fn new(use_color: bool) -> Self {
         Self {
             lines: vec![],
@@ -120,7 +124,7 @@ impl TextData {
 
     fn add_some(self, data: &mut GeoIpData, name: &str, key: &str) -> Self {
         match data.remove(key) {
-            Some(value) => self.add(name, value),
+            Some(value) => self.add(name, value.into()),
             None => self,
         }
     }
@@ -136,42 +140,13 @@ impl TextData {
         }
     }
 
-    fn print(self) -> String {
+    fn to_string(self) -> String {
         self.lines.join("\n")
     }
 }
 
-struct JsonData {
-    json: Json,
-}
-
-impl JsonData {
-    fn new() -> Self {
-        Self { json: Json::new() }
-    }
-
-    fn add(mut self, name: &str, value: String) -> Self {
-        self.json.add(Json::OBJECT {
-            name: name.into(),
-            value: Box::new(Json::STRING(value)),
-        });
-        self
-    }
-
-    fn add_some(self, data: &mut GeoIpData, name: &str, key: &str) -> Self {
-        match data.remove(key) {
-            Some(value) => self.add(name, value),
-            _ => self,
-        }
-    }
-
-    fn print(self) -> String {
-        self.json.print()
-    }
-}
-
 // https://stackoverflow.com/a/42235254/1878180
-fn country_code_to_flag(iso_code: &str) -> String {
+fn get_flag(iso_code: &str) -> String {
     let offset: u32 = 0x1F1A5;
     let mut country = iso_code.bytes();
     let char0 = country.next().unwrap() as u32 + offset;

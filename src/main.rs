@@ -1,13 +1,14 @@
-mod db_error;
 mod dns_error;
-mod geoip;
 mod ip;
 mod output;
 
 use atty::Stream;
 use clap::{App, AppSettings, Arg};
-use output::OutputFormat;
+use dns_error::error_message;
+use maxminddb::{MaxMindDBError, Reader};
+use output::Format;
 use std::net::{IpAddr, Ipv4Addr};
+use std::path::Path;
 use std::process::exit;
 
 const DEFAULT_DATABASE_PATH: &str = "/var/lib/GeoIP";
@@ -45,10 +46,10 @@ fn main() {
         )
         .get_matches();
 
-    let out = if matches.is_present("json") {
-        OutputFormat::Json
+    let format = if matches.is_present("json") {
+        Format::Json
     } else if matches.is_present("short") {
-        OutputFormat::Text(false)
+        Format::Text(false)
     } else {
         let color = matches.value_of("color").unwrap_or("auto");
         let use_color = match color {
@@ -57,27 +58,43 @@ fn main() {
             _ => atty::is(Stream::Stdout),
         };
 
-        OutputFormat::Text(use_color)
+        Format::Text(use_color)
     };
 
     let addr = match matches.value_of("ip") {
         Some(addr) => IpAddr::V4(addr.parse().unwrap()),
-        None => ip::dig().unwrap_or_else(|e| {
-            eprintln!("{}", out.format_dns_error(e));
+        None => ip::dig().unwrap_or_else(|error| {
+            let msg = error_message(error);
+            eprintln!("{}", format.format_error(msg));
             exit(1)
         }),
     };
 
     if matches.is_present("short") {
         println!("{}", addr);
-        exit(0);
+        return;
     }
 
     let path = matches.value_of("db").unwrap_or(DEFAULT_DATABASE_PATH);
-    let mut data = geoip::lookup(path, addr).unwrap_or_else(|e| {
-        eprintln!("{}", out.format_db_error(e));
+    let output = query_db(&format, path, addr).unwrap_or_else(|error| {
+        let msg = error.to_string();
+        eprintln!("{}", format.format_error(msg));
         exit(2)
     });
 
-    println!("{}", out.format(&mut data));
+    println!("{}", output);
+}
+
+fn query_db(format: &Format, path: &str, addr: IpAddr) -> Result<String, MaxMindDBError> {
+    let reader = load_database(path, "GeoLite2-City.mmdb")?;
+    let city = reader.lookup(addr)?;
+
+    let reader = load_database(path, "GeoLite2-ASN.mmdb")?;
+    let asn = reader.lookup(addr)?;
+    Ok(format.output(addr, &city, &asn))
+}
+
+pub fn load_database(path: &str, filename: &str) -> Result<Reader<Vec<u8>>, MaxMindDBError> {
+    let path = Path::new(path).join(filename);
+    Reader::open_readfile(path)
 }

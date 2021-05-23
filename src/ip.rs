@@ -1,6 +1,6 @@
 use core::panic;
-use dns::record::{Record, A};
-use dns::{qtype, Answer, Flags, Labels, QClass, Query, Request};
+use dns::record::{Record, RecordType, A};
+use dns::{Answer, Flags, Labels, QClass, Query, Request};
 use dns_transport::{Error as TransportError, Transport, UdpTransport};
 use std::net::IpAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -9,7 +9,7 @@ fn make_request() -> Request {
     let query = Query {
         qname: Labels::encode("myip.opendns.com").unwrap(),
         qclass: QClass::IN,
-        qtype: qtype!(A),
+        qtype: RecordType::A,
     };
 
     Request {
@@ -27,13 +27,13 @@ const RESOLVERS: [&str; 4] = [
     "resolver4.opendns.com",
 ];
 
-fn pick_resolver<'a>() -> &'a str {
+fn pick_resolver() -> String {
     let n = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis();
 
-    RESOLVERS[(n % 4) as usize]
+    RESOLVERS[(n % RESOLVERS.len() as u128) as usize].into()
 }
 
 pub fn dig() -> Result<IpAddr, TransportError> {
