@@ -28,21 +28,21 @@ fn main() {
         .version(clap::crate_version!())
         .about(clap::crate_description!())
         .version_short("v")
-        .arg(Arg::from_usage("-a, --address=[IP] 'Look for specified IP.'").validator(is_ipv4))
+        .arg(Arg::from_usage("-a, --address=[IP] 'Look for specified IP'").validator(is_ipv4))
         .arg(
-            Arg::from_usage("-s, --short 'Show only ip (without quering MaxMind database).'")
+            Arg::from_usage("-s, --short 'Show only IP (skip query to local MaxMind database)'")
                 .conflicts_with_all(&["ip", "db", "json", "color"]),
         )
-        .arg(Arg::from_usage("-j, --json 'Output in JSON.'"))
-        .arg(Arg::from_usage(
-            "-d, --db=[PATH] 'Custom MaxMind database directory [default: /var/lib/GeoIP].'",
-        ))
+        .arg(Arg::from_usage("-j, --json 'Output in JSON'"))
         .arg(
-            Arg::from_usage(
-                "-c, --color=[WHEN] 'When to colorize text output (always, never, auto) [default: auto].'",
-            )
-            .possible_values(&["always", "never", "auto"])
-            .conflicts_with("json"),
+            Arg::from_usage("-d, --db=[PATH] 'Custom MaxMind database directory'")
+                .default_value(DEFAULT_DATABASE_PATH),
+        )
+        .arg(
+            Arg::from_usage("-c, --color=[WHEN] 'When to colorize text output'")
+                .default_value("auto")
+                .possible_values(&["always", "never", "auto"])
+                .conflicts_with("json"),
         )
         .get_matches();
 
@@ -51,7 +51,7 @@ fn main() {
     } else if matches.is_present("short") {
         Format::Text(false)
     } else {
-        let color = matches.value_of("color").unwrap_or("auto");
+        let color = matches.value_of("color").unwrap_or_default();
         let use_color = match color {
             "always" => true,
             "never" => false,
@@ -75,7 +75,7 @@ fn main() {
         return;
     }
 
-    let path = matches.value_of("db").unwrap_or(DEFAULT_DATABASE_PATH);
+    let path = matches.value_of("db").unwrap_or_default();
     let output = query_db(&format, path, addr).unwrap_or_else(|error| {
         let msg = error.to_string();
         let ip = addr.to_string();
