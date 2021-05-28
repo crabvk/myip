@@ -18,7 +18,7 @@ impl Format {
             Self::Text(use_colors) => {
                 let data = &mut get_data(city, asn);
                 TextOutput::new(*use_colors)
-                    .add_some(data, "IP", "ip")
+                    .add("IP", ip.to_string())
                     .add_some(data, "City", "city")
                     .add_pair(data, "Country", "country", "country_code")
                     .add_pair(data, "Region", "region", "region_code")
@@ -68,7 +68,7 @@ impl Format {
 }
 
 fn get_data<'a>(city: &'a City, asn: &'a Asn) -> GeoIpData<'a> {
-    let mut data: GeoIpData = HashMap::new();
+    let mut data = GeoIpData::new();
 
     if let Some(city) = &city.city {
         data.insert("city", city.names.as_ref().unwrap()["en"]);

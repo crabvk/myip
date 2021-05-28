@@ -40,7 +40,6 @@ fn main() {
         )
         .arg(
             Arg::from_usage("-c, --color=[WHEN] 'When to colorize text output'")
-                .default_value("auto")
                 .possible_values(&["always", "never", "auto"])
                 .conflicts_with("json"),
         )
@@ -51,7 +50,7 @@ fn main() {
     } else if matches.is_present("short") {
         Format::Text(false)
     } else {
-        let color = matches.value_of("color").unwrap_or_default();
+        let color = matches.value_of("color").unwrap_or("auto");
         let use_color = match color {
             "always" => true,
             "never" => false,
