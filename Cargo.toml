@@ -1,6 +1,6 @@
 [package]
 name = "myip"
-version = "0.2.0"
+version = "0.3.1"
 authors = ["Vyacheslav Konovalov <🦀vk@protonmail.com>"]
 description = "Simple command-line tool to get your external IP address."
 homepage = "https://github.com/crabvk/myip"
@@ -14,7 +14,7 @@ edition = "2018"
 [dependencies]
 dns = { git = "https://github.com/ogham/dog" }
 dns-transport = { git = "https://github.com/ogham/dog" }
-maxminddb = "0.17"
+maxminddb = "0.21"
 ansi_term = "0.12"
 serde = "1.0"
 serde_json = "1.0"
