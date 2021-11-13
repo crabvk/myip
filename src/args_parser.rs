@@ -12,14 +12,13 @@ Usage:
 
 Options:
     -a --address <ip>     Look for specified IP
-    -d --database <path>  Custom MaxMind database directory [default: {}]
+    -l --lookup=[<path>]  Lookup MaxMind database [default path: {}]
     -c --color <when>     When to colorize text output [possible values: {}]
-    -s --short            Show only IP (skip query to local MaxMind database)
     -j --json             Output in JSON
 
     -h --help             Prints help information
     -v --version          Prints version information",
-        crate::DEFAULT_DATABASE_PATH,
+        crate::DATABASE_PATH,
         crate::COLORS.join(", ")
     )
 }
@@ -27,9 +26,8 @@ Options:
 #[derive(Debug)]
 pub struct Args {
     pub address: Option<IpAddr>,
-    pub database: PathBuf,
+    pub lookup: Option<PathBuf>,
     pub color: Color,
-    pub short: bool,
     pub json: bool,
     version: bool,
 }
@@ -39,9 +37,8 @@ pub fn from_env() -> Result<Args, lexopt::Error> {
 
     let mut args = Args {
         address: None,
-        database: PathBuf::from(crate::DEFAULT_DATABASE_PATH),
+        lookup: None,
         color: Color::Auto,
-        short: false,
         json: false,
         version: false,
     };
@@ -53,9 +50,14 @@ pub fn from_env() -> Result<Args, lexopt::Error> {
             Short('a') | Long("address") if args.address.is_none() => {
                 args.address = Some(parser.value()?.parse()?)
             }
-            Short('d') | Long("database") => args.database = parser.value()?.into_string()?.into(),
+            Short('l') | Long("lookup") => {
+                if let Some(path) = parser.optional_value() {
+                    args.lookup = Some(path.into_string()?.into())
+                } else {
+                    args.lookup = Some(PathBuf::from(crate::DATABASE_PATH))
+                }
+            }
             Short('c') | Long("color") => args.color = parser.value()?.parse()?,
-            Short('s') | Long("short") => args.short = true,
             Short('j') | Long("json") => args.json = true,
             Short('v') | Long("version") => {
                 println!("{} {}", crate::NAME, crate::VERSION);

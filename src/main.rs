@@ -12,9 +12,11 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::exit;
 
-const NAME: &'static str = env!("CARGO_PKG_NAME");
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-const DEFAULT_DATABASE_PATH: &str = "/var/lib/GeoIP";
+const NAME: &str = env!("CARGO_PKG_NAME");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const MMDB_CITY_FILE: &str = "GeoLite2-City.mmdb";
+const MMDB_ASN_FILE: &str = "GeoLite2-ASN.mmdb";
+const DATABASE_PATH: &str = "/var/lib/GeoIP";
 const COLORS: [&str; 3] = ["auto", "always", "never"];
 
 fn main() -> Result<(), lexopt::Error> {
@@ -22,7 +24,7 @@ fn main() -> Result<(), lexopt::Error> {
 
     let format = if args.json {
         Format::Json
-    } else if args.short {
+    } else if args.lookup.is_none() {
         Format::Text(false)
     } else {
         use Color::*;
@@ -44,12 +46,12 @@ fn main() -> Result<(), lexopt::Error> {
         })
     };
 
-    if args.short {
+    if args.lookup.is_none() {
         println!("{}", addr);
         exit(0);
     }
 
-    let output = lookup_mmdb(&format, &args.database, addr).unwrap_or_else(|error| {
+    let output = lookup_mmdb(&format, &args.lookup.unwrap(), addr).unwrap_or_else(|error| {
         let msg = error.to_string();
         let ip = addr.to_string();
         eprintln!("{}", format.format_error(msg, Some(ip)));
@@ -62,10 +64,10 @@ fn main() -> Result<(), lexopt::Error> {
 }
 
 fn lookup_mmdb(format: &Format, path: &PathBuf, addr: IpAddr) -> Result<String, MaxMindDBError> {
-    let reader = open_mmdb(path, "GeoLite2-City.mmdb")?;
+    let reader = open_mmdb(path, MMDB_CITY_FILE)?;
     let city = reader.lookup(addr)?;
 
-    let reader = open_mmdb(path, "GeoLite2-ASN.mmdb")?;
+    let reader = open_mmdb(path, MMDB_ASN_FILE)?;
     let asn = reader.lookup(addr)?;
     Ok(format.output(addr, &city, &asn))
 }
