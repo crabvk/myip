@@ -39,7 +39,7 @@ fn main() -> Result<(), lexopt::Error> {
     let addr = if let Some(addr) = args.address {
         addr
     } else {
-        ip::dig().unwrap_or_else(|error| {
+        ip::dig(!args.inet6).unwrap_or_else(|error| {
             let msg = error_message(error);
             eprintln!("{}", format.format_error(msg, None));
             exit(1)

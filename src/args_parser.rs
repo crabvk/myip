@@ -11,9 +11,10 @@ Usage:
     myip [options]
 
 Options:
-    -a --address <ip>     Look for specified IP
     -l --lookup=[<path>]  Lookup MaxMind database [default path: {}]
+    -a --address <ip>     Look for specified IP
     -c --color <when>     When to colorize text output [possible values: {}]
+    -6 --inet6            Use inet6 protocol family (IPv6)
     -j --json             Output in JSON
 
     -h --help             Prints help information
@@ -28,6 +29,7 @@ pub struct Args {
     pub address: Option<IpAddr>,
     pub lookup: Option<PathBuf>,
     pub color: Color,
+    pub inet6: bool,
     pub json: bool,
     version: bool,
 }
@@ -39,6 +41,7 @@ pub fn from_env() -> Result<Args, lexopt::Error> {
         address: None,
         lookup: None,
         color: Color::Auto,
+        inet6: false,
         json: false,
         version: false,
     };
@@ -59,6 +62,7 @@ pub fn from_env() -> Result<Args, lexopt::Error> {
             }
             Short('c') | Long("color") => args.color = parser.value()?.parse()?,
             Short('j') | Long("json") => args.json = true,
+            Short('6') | Long("inet6") => args.inet6 = true,
             Short('v') | Long("version") => {
                 println!("{} {}", crate::NAME, crate::VERSION);
                 exit(0);
