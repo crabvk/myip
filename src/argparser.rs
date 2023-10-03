@@ -1,11 +1,11 @@
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::exit;
-use std::str::FromStr;
+use std::{error, fmt, str::FromStr};
 
 fn help_msg() -> String {
     format!(
-        "Simple command-line tool to get your external IP address.
+        "{}
 
 Usage:
     myip [options]
@@ -19,7 +19,8 @@ Options:
 
     -h --help             Prints help information
     -v --version          Prints version information",
-        crate::DATABASE_PATH,
+        env!("CARGO_PKG_DESCRIPTION"),
+        crate::MMDB_PATH,
         crate::COLORS.join(", ")
     )
 }
@@ -31,7 +32,6 @@ pub struct Args {
     pub color: Color,
     pub inet6: bool,
     pub json: bool,
-    version: bool,
 }
 
 pub fn from_env() -> Result<Args, lexopt::Error> {
@@ -43,7 +43,6 @@ pub fn from_env() -> Result<Args, lexopt::Error> {
         color: Color::Auto,
         inet6: false,
         json: false,
-        version: false,
     };
 
     let mut parser = lexopt::Parser::from_env();
@@ -57,7 +56,7 @@ pub fn from_env() -> Result<Args, lexopt::Error> {
                 if let Some(path) = parser.optional_value() {
                     args.lookup = Some(path.into_string()?.into())
                 } else {
-                    args.lookup = Some(PathBuf::from(crate::DATABASE_PATH))
+                    args.lookup = Some(PathBuf::from(crate::MMDB_PATH))
                 }
             }
             Short('c') | Long("color") => args.color = parser.value()?.parse()?,
@@ -85,19 +84,31 @@ pub enum Color {
     Never,
 }
 
+#[derive(Debug)]
+pub struct ParseColorError(String);
+
+impl fmt::Display for ParseColorError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "unknown variant \"{}\", possible values: {}",
+            self.0,
+            crate::COLORS.join(", ")
+        )
+    }
+}
+
+impl error::Error for ParseColorError {}
+
 impl FromStr for Color {
-    type Err = String;
+    type Err = ParseColorError;
 
     fn from_str(input: &str) -> Result<Color, Self::Err> {
         match input {
             "auto" => Ok(Color::Auto),
             "always" => Ok(Color::Always),
             "never" => Ok(Color::Never),
-            _ => Err(format!(
-                "Invalid color '{}' [possible values: {}]",
-                input,
-                crate::COLORS.join(", ")
-            )),
+            color => Err(ParseColorError(color.to_owned())),
         }
     }
 }
